@@ -25,21 +25,6 @@ import com.revrobotics.CANEncoder;
 
 public class DriveTrain extends PIDSubsystem implements Loggable, Refreshable {
 
-    // motor ports
-    private static int LEFT_MOTOR_GROUP, RIGHT_MOTOR_GROUP;
-    // encoder ports/channels
-    // private static int FRONT_LEFT_ENCODER_CHANNEL_A,
-    // FRONT_LEFT_ENCODER_CHANNEL_B,
-    // FRONT_RIGHT_ENCODER_CHANNEL_A,
-    // FRONT_RIGHT_ENCODER_CHANNEL_B;
-
-    // private static boolean FORWARD_DIRECTION, REVERSE_DIRECTION;
-    // private static CounterBase.EncodingType ENCODER_TYPE;
-
-    // encoder mapping
-    // private static int COUNTS_PER_REVOLUTION;
-    // private static double WHEEL_RADIUS;
-
     // controller port
     private static int CONTROLLER_PORT;
 
@@ -48,8 +33,7 @@ public class DriveTrain extends PIDSubsystem implements Loggable, Refreshable {
     public static final double GEAR_RATIO_HIGH;
 
     // SparkMax
-    private static final int LEFTID;
-    private static final int RIGHTID;
+    private static final int LEFTFID, RIGHTFID, LEFTLID, RIGHTLID;
 
     private double distance;
 
@@ -92,19 +76,25 @@ public class DriveTrain extends PIDSubsystem implements Loggable, Refreshable {
         GEAR_RATIO_LOW = 4.6;
         GEAR_RATIO_HIGH = 2.7;
 
-        LEFTID = 10;
-        RIGHTID = 20;
+        LEFTLID = 10;
+        LEFTFID = 11;
+        RIGHTLID = 20;
+        RIGHTFID = 21;
     }
 
-    private CANSparkMax left;
-    private CANSparkMax right;
+    private CANSparkMax leftF;
+    private CANSparkMax rightF;
+    private CANSparkMax leftL;
+    private CANSparkMax rightL;
 
     // underlying mechanism
     private DifferentialDrive drive;
 
     // distance encoders
-    private CANEncoder leftEncoder;
-    private CANEncoder rightEncoder;
+    private CANEncoder leftLEncoder;
+    private CANEncoder rightLEncoder;
+    private CANEncoder leftFEncoder;
+    private CANEncoder rightFEncoder;
 
     private double leftDistance, rightDistance;
 
@@ -166,18 +156,27 @@ public class DriveTrain extends PIDSubsystem implements Loggable, Refreshable {
         DriveModeChooser = new SendableChooser<>();
 
         // initialize hardware
-        right = new CANSparkMax(RIGHTID, MotorType.kBrushless);
-        left = new CANSparkMax(LEFTID, MotorType.kBrushless);
+        rightL = new CANSparkMax(RIGHTLID, MotorType.kBrushless);
+        leftL = new CANSparkMax(LEFTLID, MotorType.kBrushless);
+        rightF = new CANSparkMax(RIGHTFID, MotorType.kBrushless);
+        leftF = new CANSparkMax(LEFTFID, MotorType.kBrushless);
 
-        left.restoreFactoryDefaults();
-        right.restoreFactoryDefaults();
+        leftL.restoreFactoryDefaults();
+        rightL.restoreFactoryDefaults();
+        leftF.restoreFactoryDefaults();
+        rightF.restoreFactoryDefaults();
 
-        drive = new DifferentialDrive(left, right);
+        rightF.follow(rightL);
+        leftF.follow(leftL);
+
+        drive = new DifferentialDrive(leftL, rightL);
 
         initializeEncoders();
 
-        left.setInverted(false);
-        right.setInverted(false);
+        leftL.setInverted(true);
+        rightL.setInverted(true);
+        leftF.setInverted(true);
+        rightF.setInverted(true);
 
         arcadeDrive(0, 0);
         drive.setSafetyEnabled(false);
@@ -197,28 +196,28 @@ public class DriveTrain extends PIDSubsystem implements Loggable, Refreshable {
         SmartDashboard.putNumber("DriveTrain/Position/xPos", getxPos());
         SmartDashboard.putNumber("DriveTrain/Position/yPos", getyPos());
 
-        if (left.getIdleMode() == IdleMode.kCoast) {
+        if (leftL.getIdleMode() == IdleMode.kCoast) {
             SmartDashboard.putString("DriveTrain/LeftEncoder/Idle Mode", "Coast");
-        } else if (left.getIdleMode() == IdleMode.kBrake) {
+        } else if (leftL.getIdleMode() == IdleMode.kBrake) {
             SmartDashboard.putString("DriveTrain/LeftEncoder/Idle Mode", "Brake");
         }
 
-        if (right.getIdleMode() == IdleMode.kCoast) {
+        if (rightL.getIdleMode() == IdleMode.kCoast) {
             SmartDashboard.putString("DriveTrain/RightEncoder/Idle Mode", "Coast");
-        } else if (right.getIdleMode() == IdleMode.kBrake) {
+        } else if (rightL.getIdleMode() == IdleMode.kBrake) {
             SmartDashboard.putString("DriveTrain/RightEncoder/Idle Mode", "Brake");
         }
 
-        SmartDashboard.putNumber("DriveTrain/LeftEncoder/Ramp Rate", left.getOpenLoopRampRate());
-        SmartDashboard.putNumber("DriveTrain/RightEncoder/Ramp Rate", right.getOpenLoopRampRate());
+        SmartDashboard.putNumber("DriveTrain/LeftEncoder/Ramp Rate", leftL.getOpenLoopRampRate());
+        SmartDashboard.putNumber("DriveTrain/RightEncoder/Ramp Rate", rightL.getOpenLoopRampRate());
 
-        SmartDashboard.putNumber("DriveTrain/LeftEncoder/Voltage", left.getBusVoltage());
-        SmartDashboard.putNumber("DriveTrain/LeftEncoder/Temperature", left.getMotorTemperature());
-        SmartDashboard.putNumber("DriveTrain/LeftEncoder/Output", left.getAppliedOutput());
+        SmartDashboard.putNumber("DriveTrain/LeftEncoder/Voltage", leftL.getBusVoltage());
+        SmartDashboard.putNumber("DriveTrain/LeftEncoder/Temperature", leftL.getMotorTemperature());
+        SmartDashboard.putNumber("DriveTrain/LeftEncoder/Output", leftL.getAppliedOutput());
 
-        SmartDashboard.putNumber("DriveTrain/RightEncoder/Voltage", right.getBusVoltage());
-        SmartDashboard.putNumber("DriveTrain/RightEncoder/Temperature", right.getMotorTemperature());
-        SmartDashboard.putNumber("DriveTrain/RightEncoder/Output", right.getAppliedOutput());
+        SmartDashboard.putNumber("DriveTrain/RightEncoder/Voltage", rightL.getBusVoltage());
+        SmartDashboard.putNumber("DriveTrain/RightEncoder/Temperature", rightL.getMotorTemperature());
+        SmartDashboard.putNumber("DriveTrain/RightEncoder/Output", rightL.getAppliedOutput());
 
         SmartDashboard.putNumber("DriveTrain/LeftEncoder/Encoder", leftDistance);
         SmartDashboard.putNumber("DriveTrain/RightEncoder/Encoder", rightDistance);
@@ -322,8 +321,8 @@ public class DriveTrain extends PIDSubsystem implements Loggable, Refreshable {
      * Reset the robots sensors to the zero states.
      */
     public void reset() {
-        leftEncoder.setPosition(0);
-        rightEncoder.setPosition(0);
+        leftLEncoder.setPosition(0);
+        rightLEncoder.setPosition(0);
         setChosenGear(Gear.FIRST);
     }
 
@@ -346,8 +345,8 @@ public class DriveTrain extends PIDSubsystem implements Loggable, Refreshable {
     private void updateDistance(){
         double changeinDistance = 0;
         double prevDistance = distance;
-        leftDistance = -leftEncoder.getPosition();
-        rightDistance = rightEncoder.getPosition();
+        leftDistance = -leftLEncoder.getPosition();
+        rightDistance = rightLEncoder.getPosition();
         distance = (leftDistance + rightDistance) / 2;
 
         AHRS navx = Robot.getInstance().getNAVX();
@@ -379,24 +378,29 @@ public class DriveTrain extends PIDSubsystem implements Loggable, Refreshable {
     // will be replace by gyro!
 
     public double getTurnDistance() {
-        return (Math.abs(leftEncoder.getPosition()) + Math.abs(rightEncoder.getPosition())) / 2;
+        return (Math.abs(leftLEncoder.getPosition()) + Math.abs(rightLEncoder.getPosition())) / 2;
     }
 
-    public CANSparkMax getLeft(){
-        return left;
+    public CANSparkMax getLeftL(){
+        return leftL;
     }
 
-    public CANSparkMax getRight(){
-        return right;
+    public CANSparkMax getRightL(){
+        return rightL;
     }
 
     private void initializeEncoders() {
-        leftEncoder = left.getEncoder();
+        leftLEncoder = leftL.getEncoder();
+        leftFEncoder = leftF.getEncoder();
 
-        rightEncoder = right.getEncoder();
+        rightLEncoder = rightL.getEncoder();
+        rightFEncoder = rightF.getEncoder();
 
-        leftEncoder.setPositionConversionFactor(0.09); //0.0869565217
-        rightEncoder.setPositionConversionFactor(0.09); //0.0869565217
+        leftLEncoder.setPositionConversionFactor(0.09); //0.0869565217
+        rightLEncoder.setPositionConversionFactor(0.09); //0.0869565217
+        leftFEncoder.setPositionConversionFactor(0.09); //0.0869565217
+        rightFEncoder.setPositionConversionFactor(0.09); //0.0869565217
+
         // final double encoderLinearDistancePerPulse =
         // RobotMath.getDistancePerPulse(COUNTS_PER_REVOLUTION, WHEEL_RADIUS);
 
@@ -420,7 +424,7 @@ public class DriveTrain extends PIDSubsystem implements Loggable, Refreshable {
 
     @Override
     protected double returnPIDInput() {
-        return (rightEncoder.getPosition() - leftEncoder.getPosition());
+        return (rightLEncoder.getPosition() - leftLEncoder.getPosition());
     }
 
     @Override
