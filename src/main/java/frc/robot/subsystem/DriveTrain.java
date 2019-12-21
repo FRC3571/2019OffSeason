@@ -3,17 +3,12 @@ package frc.robot.subsystem;
 import frc.robot.Robot;
 import frc.robot.commands.ChangeGear;
 import frc.robot.commands.DriveJoystick;
-import frc.robot.commands.DriveStraightDistance;
 import frc.robot.commands.SetPosition;
-import frc.robot.commands.TurnToAngle;
 import frc.robot.util.Loggable;
 import frc.robot.util.RobotMath;
 import frc.robot.util.XboxController;
-import edu.wpi.first.wpilibj.*;
 import edu.wpi.first.wpilibj.command.PIDSubsystem;
-//import edu.wpi.first.wpilibj.command.Subsystem;
 import edu.wpi.first.wpilibj.drive.DifferentialDrive;
-import edu.wpi.first.wpilibj.shuffleboard.Shuffleboard;
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
@@ -25,52 +20,63 @@ import com.revrobotics.CANEncoder;
 
 public class DriveTrain extends PIDSubsystem implements Loggable, Refreshable {
 
-    // controller port
+    // Drive Modes
+    private enum DriveMode {
+        AONEJOY, ATWOJOY, TANK,
+    }
+
+    // Gears (Speeds)
+    public enum Gear {
+        FIRST, SECOND, THIRD, FOURTH,
+    }
+
+    // Controlller Port
     private static int CONTROLLER_PORT;
 
-    // gear ratios
+    // Gear Ratios
     public static final double GEAR_RATIO_LOW;
     public static final double GEAR_RATIO_HIGH;
 
-    // SparkMax
-    private static final int LEFTFID, RIGHTFID, LEFTLID, RIGHTLID;
-
-    private double distance;
-
-    //Choose Drive Mode
-    private enum DriveMode {
-        AONEJOY,
-        ATWOJOY,
-        TANK,
-    }
-
-    public enum Gear {
-        FIRST,
-        SECOND,
-        THIRD,
-        FOURTH,
-    }
+    // SparkMax CANIDs
+    private static final int LEFTFID;
+    private static final int RIGHTFID;
+    private static final int LEFTLID;
+    private static final int RIGHTLID;
 
     private DriveMode ChosenDrive;
     private Gear ChosenGear;
     private SendableChooser<DriveMode> DriveModeChooser;
+    private static final double FIRSTGEARRATIO;
+    private static final double SECONDGEARRATIO;
+    private static final double THIRDGEARRATIO;
+
+
+    // SparkMax Objects
+    private CANSparkMax leftF;
+    private CANSparkMax rightF;
+    private CANSparkMax leftL;
+    private CANSparkMax rightL;
+
+    // underlying mechanism
+    private DifferentialDrive drive;
+
+    // Distance Encoders
+    private CANEncoder leftLEncoder;
+    private CANEncoder rightLEncoder;
+    private CANEncoder leftFEncoder;
+    private CANEncoder rightFEncoder;
+
+    private double distance, leftDistance, rightDistance;
+
+    // Driver Controller
+    private XboxController controller;
+
+    private float lastSpeed;
+
+    private double xPos, yPos;
 
     static {
-        // initialization
-        // LEFT_MOTOR_GROUP = 0;
-        // RIGHT_MOTOR_GROUP = 1;
-
-        // FRONT_LEFT_ENCODER_CHANNEL_A = 2;
-        // FRONT_LEFT_ENCODER_CHANNEL_B = 3;
-        // FRONT_RIGHT_ENCODER_CHANNEL_A = 4;
-        // FRONT_RIGHT_ENCODER_CHANNEL_B = 5;
-
-        // FORWARD_DIRECTION = false;
-        // REVERSE_DIRECTION = true;
-        // ENCODER_TYPE = CounterBase.EncodingType.k1X;
-        // COUNTS_PER_REVOLUTION = 2048;
-        // WHEEL_RADIUS = 62.5; //in mm
-
+        // Initialization
         CONTROLLER_PORT = 0;
 
         GEAR_RATIO_LOW = 4.6;
@@ -80,75 +86,42 @@ public class DriveTrain extends PIDSubsystem implements Loggable, Refreshable {
         LEFTFID = 11;
         RIGHTLID = 20;
         RIGHTFID = 21;
+
+        FIRSTGEARRATIO = 0.3;
+        SECONDGEARRATIO = 0.4;
+        THIRDGEARRATIO = 0.5;
     }
-
-    private CANSparkMax leftF;
-    private CANSparkMax rightF;
-    private CANSparkMax leftL;
-    private CANSparkMax rightL;
-
-    // underlying mechanism
-    private DifferentialDrive drive;
-
-    // distance encoders
-    private CANEncoder leftLEncoder;
-    private CANEncoder rightLEncoder;
-    private CANEncoder leftFEncoder;
-    private CANEncoder rightFEncoder;
-
-    private double leftDistance, rightDistance;
-
-    // driver controller
-    private XboxController controller;
-
-    // private float error;
-
-    private float lastSpeed;
-
-    private double xPos, yPos;
 
     @Override
     protected void initDefaultCommand() {
         setDefaultCommand(new DriveJoystick(controller));
     }
 
-	/**
-	 * @return the yPos
-	 */
-	public double getyPos() {
-		return yPos;
-	}
+    public double getyPos() {
+        return yPos;
+    }
 
-	/**
-	 * @param yPos the yPos to set
-	 */
-	public void setyPos(double yPos) {
-		this.yPos = yPos;
-	}
+    public void setyPos(double yPos) {
+        this.yPos = yPos;
+    }
 
-	/**
-	 * @return the xPos
-	 */
-	public double getxPos() {
-		return xPos;
-	}
+    public double getxPos() {
+        return xPos;
+    }
 
-	/**
-	 * @param xPos the xPos to set
-	 */
-	public void setxPos(double xPos) {
-		this.xPos = xPos;
-	}
+    public void setxPos(double xPos) {
+        this.xPos = xPos;
+    }
 
-	public Gear getChosenGear() {
-		return ChosenGear;
-	}
+    public Gear getChosenGear() {
+        return ChosenGear;
+    }
 
-	public void setChosenGear(Gear chosenGear) {
-		this.ChosenGear = chosenGear;
-	}
+    public void setChosenGear(Gear chosenGear) {
+        this.ChosenGear = chosenGear;
+    }
 
-	public DriveTrain() {
+    public DriveTrain() {
         super("DriveTrain", 2.0, 0, 0);
 
         ChosenDrive = DriveMode.ATWOJOY;
@@ -231,88 +204,64 @@ public class DriveTrain extends PIDSubsystem implements Loggable, Refreshable {
 
         SmartDashboard.putData("DriveTrain/Position/Reset Displacement", new SetPosition(0, 0));
 
-        //SmartDashboard.putData("DriveTrain/Position/TEST ANGLE", new TurnToAngle(0, Robot.getInstance().getNAVX()));
-
         ChosenDrive = DriveModeChooser.getSelected();
     }
 
-    /**
-     * Tank style driving for the DriveTrain.
-     *
-     * @param left  Speed in range [-1,1]
-     * @param right Speed in range [-1,1]
-     */
     public void arcadeDrive(double throttle, double rotate) {
-        //lastSpeed = (float) throttle;
+         lastSpeed = (float) throttle;
 
-        if (ChosenGear == Gear.FIRST){
-            throttle *= 0.3;
-            rotate *= 0.3;
+        if (ChosenGear == Gear.FIRST) {
+            throttle *= FIRSTGEARRATIO;
+            rotate *= FIRSTGEARRATIO;
+        } else if (ChosenGear == Gear.SECOND) {
+            throttle *= SECONDGEARRATIO;
+            rotate *= SECONDGEARRATIO;
+        } else if (ChosenGear == Gear.THIRD) {
+            throttle *= THIRDGEARRATIO;
+            rotate *= THIRDGEARRATIO;
         }
-        else if (ChosenGear == Gear.SECOND){
-            throttle *= 0.4;
-            rotate *= 0.4;
-        }
-        else if (ChosenGear == Gear.THIRD){
-            throttle *= 0.5;
-            rotate *= 0.5;
-        }
-        
-        //throttle = RobotMath.MapJoyValues(throttle, 0.14, 0.4);
-        
-        //rotate = RobotMath.MapJoyValues(rotate, 0.14, 0.4);
-        
+
+        // throttle = RobotMath.MapJoyValues(throttle, 0.14, 0.4);
+
+        // rotate = RobotMath.MapJoyValues(rotate, 0.14, 0.4);
+
         SmartDashboard.putNumber("DriveTrain/Drive/ArcadeDrive/Throttle", throttle);
 
         SmartDashboard.putNumber("DriveTrain/Drive/ArcadeDrive/Rotate", rotate);
 
-        drive.arcadeDrive(throttle,rotate);
+        drive.arcadeDrive(throttle, rotate);
     }
 
     public void tankdrive(double left, double right) {
 
-        if (ChosenGear == Gear.FIRST){
-            left *= 0.3;
-            right *= 0.3;
+        if (ChosenGear == Gear.FIRST) {
+            left *= FIRSTGEARRATIO;
+            right *= FIRSTGEARRATIO;
+        } else if (ChosenGear == Gear.SECOND) {
+            left *= SECONDGEARRATIO;
+            right *= SECONDGEARRATIO;
+        } else if (ChosenGear == Gear.THIRD) {
+            left *= THIRDGEARRATIO;
+            right *= THIRDGEARRATIO;
         }
-        else if (ChosenGear == Gear.SECOND){
-            left *= 0.4;
-            right *= 0.4;
-        }
-        else if (ChosenGear == Gear.THIRD){
-            left *= 0.5;
-            right *= 0.5;
-        }
-        
-        //left = RobotMath.MapJoyValues(left, 0.14, 0.4);
-        
-        //right = RobotMath.MapJoyValues(right, 0.14, 0.4);
+
+        // left = RobotMath.MapJoyValues(left, 0.14, 0.4);
+
+        // right = RobotMath.MapJoyValues(right, 0.14, 0.4);
 
         SmartDashboard.putNumber("DriveTrain/Drive/TankDrive/Left", left);
 
         SmartDashboard.putNumber("DriveTrain/Drive/TankDrive/Right", right);
 
-        
-
-        drive.tankDrive(left,right);
+        drive.tankDrive(left, right);
     }
 
-    /**
-     * Tank style driving for the DriveTrain.
-     *
-     * @param xbox The XboxController use to drive tank style.
-     */
     public void drive(XboxController xbox) {
-        // drive(-xbox.getY(GenericHID.Hand.kLeft), xbox.getY(GenericHID.Hand.kRight));
-        // drive(-xbox.LeftStick.Y, -xbox.RightStick.Y); //tank drive
-
-        if (ChosenDrive == DriveMode.AONEJOY){
+        if (ChosenDrive == DriveMode.AONEJOY) {
             arcadeDrive(xbox.RightStick.Y, -xbox.RightStick.X);
-        }
-        else if (ChosenDrive == DriveMode.ATWOJOY){
+        } else if (ChosenDrive == DriveMode.ATWOJOY) {
             arcadeDrive(xbox.LeftStick.Y, -xbox.RightStick.X);
-        }
-        else if (ChosenDrive == DriveMode.TANK){
+        } else if (ChosenDrive == DriveMode.TANK) {
             tankdrive(xbox.LeftStick.Y, xbox.RightStick.Y);
         }
     }
@@ -323,26 +272,19 @@ public class DriveTrain extends PIDSubsystem implements Loggable, Refreshable {
     public void reset() {
         leftLEncoder.setPosition(0);
         rightLEncoder.setPosition(0);
-        setChosenGear(Gear.FIRST);
+        setChosenGear(Gear.SECOND);
     }
 
-    public void resetDisplacement(){
+    public void resetDisplacement() {
         xPos = 0;
         yPos = 0;
     }
 
-    /**
-     * Get the average distance of the encoders since the last reset.
-     *
-     * @return The distance driven (average of leftControllerand
-     *         rightControllerencoders).
-     */
-    
     public double getDistance() {
         return distance;
     }
 
-    private void updateDistance(){
+    private void updateDistance() {
         double changeinDistance = 0;
         double prevDistance = distance;
         leftDistance = -leftLEncoder.getPosition();
@@ -353,16 +295,13 @@ public class DriveTrain extends PIDSubsystem implements Loggable, Refreshable {
 
         double angle = navx.getYaw();
 
-        if (angle >= 0 && angle <= 90){
+        if (angle >= 0 && angle <= 90) {
             angle = RobotMath.mapDouble(angle, 0, 90, 90, 0);
-        }
-        else if (angle >= 90 && angle <= 180){
+        } else if (angle >= 90 && angle <= 180) {
             angle = RobotMath.mapDouble(angle, 90, 180, 360, 270);
-        }
-        else if (angle <= 0 && angle >= -90){
+        } else if (angle <= 0 && angle >= -90) {
             angle = RobotMath.mapDouble(angle, -90, 0, 180, 90);
-        }
-        else if (angle <= -90 && angle >= -180){
+        } else if (angle <= -90 && angle >= -180) {
             angle = RobotMath.mapDouble(angle, -180, -90, 270, 180);
         }
 
@@ -375,17 +314,11 @@ public class DriveTrain extends PIDSubsystem implements Loggable, Refreshable {
         setyPos(getyPos() + (changeinDistance * Math.sin(angle)));
     }
 
-    // will be replace by gyro!
-
-    public double getTurnDistance() {
-        return (Math.abs(leftLEncoder.getPosition()) + Math.abs(rightLEncoder.getPosition())) / 2;
-    }
-
-    public CANSparkMax getLeftL(){
+    public CANSparkMax getLeftL() {
         return leftL;
     }
 
-    public CANSparkMax getRightL(){
+    public CANSparkMax getRightL() {
         return rightL;
     }
 
@@ -396,30 +329,20 @@ public class DriveTrain extends PIDSubsystem implements Loggable, Refreshable {
         rightLEncoder = rightL.getEncoder();
         rightFEncoder = rightF.getEncoder();
 
-        leftLEncoder.setPositionConversionFactor(0.09); //0.0869565217
-        rightLEncoder.setPositionConversionFactor(0.09); //0.0869565217
-        leftFEncoder.setPositionConversionFactor(0.09); //0.0869565217
-        rightFEncoder.setPositionConversionFactor(0.09); //0.0869565217
-
-        // final double encoderLinearDistancePerPulse =
-        // RobotMath.getDistancePerPulse(COUNTS_PER_REVOLUTION, WHEEL_RADIUS);
-
-        // leftEncoder.setDistancePerPulse(encoderLinearDistancePerPulse);
-        // rightEncoder.setDistancePerPulse(encoderLinearDistancePerPulse);
+        leftLEncoder.setPositionConversionFactor(0.09); // 0.0869565217
+        rightLEncoder.setPositionConversionFactor(0.09); // 0.0869565217
+        leftFEncoder.setPositionConversionFactor(0.09); // 0.0869565217
+        rightFEncoder.setPositionConversionFactor(0.09); // 0.0869565217
     }
-
-     
-    
 
     @Override
     public void refresh() {
         controller.refresh();
-        
+
         controller.Buttons.X.runCommand(new ChangeGear(1), XboxController.CommandState.WhenPressed);
         controller.Buttons.Y.runCommand(new ChangeGear(2), XboxController.CommandState.WhenPressed);
         controller.Buttons.B.runCommand(new ChangeGear(3), XboxController.CommandState.WhenPressed);
         controller.Buttons.A.runCommand(new ChangeGear(4), XboxController.CommandState.WhenPressed);
-        //controller.Buttons.B.runCommand(new TurnToAngle(setPoint, Robot.getInstance().getNAVX()), XboxController.CommandState.WhenPressed);
     }
 
     @Override
